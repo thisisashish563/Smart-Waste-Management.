@@ -1,0 +1,97 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include <DHT.h>
+
+const char* ssid = "Redmi 12 5G";     // Enter your WiFi SSID
+const char* password = "12345678";    // Enter your WiFi Password
+
+// Pins for the sensors
+const int trigPin = D5;         // Trigger pin for ultrasonic sensor
+const int echoPin = D6;         // Echo pin for ultrasonic sensor
+const int dhtPin = D1;          // Data pin for DHT11 sensor
+const int mq2Pin = A0;          // Analog pin for MQ-2 gas sensor
+
+// DHT sensor setup
+#define DHTTYPE DHT11
+DHT dht(dhtPin, DHTTYPE);
+
+ESP8266WebServer server(80);
+
+void setup() {
+  Serial.begin(9600);
+  delay(100);
+
+  // Sensor initialization
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(mq2Pin, INPUT);
+
+  dht.begin();
+
+  Serial.println("Connecting to WiFi...");
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting...");
+  }
+
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  server.on("/", handleRoot);
+  server.begin();
+  Serial.println("HTTP server started");
+}
+
+void loop() {
+  server.handleClient();
+}
+
+void handleRoot() {
+  float distance = getDistance();         // Get distance from ultrasonic sensor
+  float temperature = dht.readTemperature();  // Get temperature from DHT11 sensor
+  float humidity = dht.readHumidity();        // Get humidity from DHT11 sensor
+  int mq2Value = analogRead(mq2Pin);          // Get value from MQ-2 gas sensor
+
+  // Check if any reads failed and handle accordingly
+  if (isnan(temperature) || isnan(humidity)) {
+    Serial.println("Failed to read from DHT sensor!");
+    temperature = 0.0;
+    humidity = 0.0;
+  }
+
+  String webpage = "<!DOCTYPE html><html><head><title>Sensor Data</title>";
+  webpage += "<style>body { font-family: Arial, sans-serif; text-align: center; } h1 { color: #333; } .data { font-size: 24px; animation: color-change 1s infinite; } @keyframes color-change { 0% { color: red; } 50% { color: blue; } 100% { color: green; } }</style>";
+  webpage += "</head><body>";
+  webpage += "<h1>Sensor Data</h1>";
+  webpage += "<p class='data'>Distance: ";
+  webpage += String(distance);
+  webpage += " cm</p>";
+  webpage += "<p class='data'>Temperature: ";
+  webpage += String(temperature);
+  webpage += " &#8451;</p>";
+  webpage += "<p class='data'>Humidity: ";
+  webpage += String(humidity);
+  webpage += " %</p>";
+  webpage += "<p class='data'>Gas Level: ";
+  webpage += String(mq2Value);
+  webpage += " (analog value)</p>";
+  webpage += "</body></html>";
+
+  server.send(200, "text/html", webpage);
+}
+
+float getDistance() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  long duration = pulseIn(echoPin, HIGH);
+  float distance = duration * 0.034 / 2;
+
+  return distance;
+}
